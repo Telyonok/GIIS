@@ -73,19 +73,19 @@ class GraphicsEditor3D:
         self.x_label.grid(row=0, column=0, padx=5, pady=5)
         self.x_entry = tk.Entry(self.point_frame, width=10)
         self.x_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.x_entry.bind("<KeyRelease>", self.x_changed)  # Bind the KeyRelease event
+        self.x_entry.bind("<KeyRelease>", self.x_changed)
 
         self.y_label = tk.Label(self.point_frame, text="Y:")
         self.y_label.grid(row=1, column=0, padx=5, pady=5)
         self.y_entry = tk.Entry(self.point_frame, width=10)
         self.y_entry.grid(row=1, column=1, padx=5, pady=5)
-        self.y_entry.bind("<KeyRelease>", self.y_changed)  # Bind the KeyRelease event
+        self.y_entry.bind("<KeyRelease>", self.y_changed)
 
         self.z_label = tk.Label(self.point_frame, text="Z:")
         self.z_label.grid(row=2, column=0, padx=5, pady=5)
         self.z_entry = tk.Entry(self.point_frame, width=10)
         self.z_entry.grid(row=2, column=1, padx=5, pady=5)
-        self.z_entry.bind("<KeyRelease>", self.z_changed)  # Bind the KeyRelease event
+        self.z_entry.bind("<KeyRelease>", self.z_changed)
 
         self.add_button = tk.Button(self.point_frame, text="Add Point", command=self.add_point)
         self.add_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
@@ -128,7 +128,7 @@ class GraphicsEditor3D:
                     file.write(f"{len(shape.points)} {points_str}\n")
 
     def open_file(self):
-        self.clear_all()  # Clear existing shapes before loading
+        self.clear_all()
         try:
             with open("shapes.txt", "r") as file:
                 for line in file:
@@ -185,17 +185,17 @@ class GraphicsEditor3D:
 
     def rotate_selected_shape_x(self, *args):
         if self.selected_shape:
-            self.selected_shape.rotate(np.pi/4, 'x')  # Rotate by 45 degrees around the X-axis
+            self.selected_shape.rotate(np.pi/4, 'x')
             self.update_plot()
 
     def rotate_selected_shape_y(self, *args):
         if self.selected_shape:
-            self.selected_shape.rotate(np.pi/4, 'y')  # Rotate by 45 degrees around the Y-axis
+            self.selected_shape.rotate(np.pi/4, 'y')
             self.update_plot()
 
     def rotate_selected_shape_z(self, *args):
         if self.selected_shape:
-            self.selected_shape.rotate(np.pi/4, 'z')  # Rotate by 45 degrees around the Z-axis
+            self.selected_shape.rotate(np.pi/4, 'z')
             self.update_plot()
 
     def move_shape_x_plus(self, *args):

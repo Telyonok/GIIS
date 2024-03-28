@@ -589,29 +589,26 @@ class GraphicsEditor2D:
             def orientation(p0, p1, p2):
                 val = ((p1[0] - p0[0]) * (p2[1] - p1[1]) - (p2[0] - p1[0]) * (p1[1] - p0[1]))
                 if val == 0:
-                    return 0  # collinear
-                return 1 if val > 0 else -1  # counter-clockwise or clockwise
+                    return 0
+                return 1 if val > 0 else -1
 
-            # Find the lowest point
             lowest = min(points, key=lambda p: p[1])
 
-            # Sort points by polar angle with respect to the lowest point
             def compare(p1, p2):
                 if p1 == lowest:
                     return -1
                 if p2 == lowest:
                     return 1
-                # Calculate the polar angle
+                
                 angle1 = math.atan2(p1[1] - lowest[1], p1[0] - lowest[0])
                 angle2 = math.atan2(p2[1] - lowest[1], p2[0] - lowest[0])
-                # Check for collinear points (same angle)
+
                 if abs(angle1 - angle2) < 1e-6:
                     return (p1[0] - lowest[0]) * (p2[1] - lowest[1]) - (p2[0] - lowest[0]) * (p1[1] - lowest[1])
                 return angle1 - angle2
 
             points.sort(key=lambda p: compare(lowest, p))
 
-            # Build the convex hull using a stack
             stack = []
             for p in points:
                 while len(stack) >= 2 and orientation(stack[-2], stack[-1], p) <= 0:
@@ -687,7 +684,7 @@ class GraphicsEditor2D:
 
             def distance(p, q):
                 return (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2
-            # Find the leftmost point
+            
             leftmost = min(points, key=lambda p: p[0])
 
             hull = []
@@ -711,13 +708,10 @@ class GraphicsEditor2D:
 
             return hull
 
-        # Convert coordinates to point objects
         points = [(line[i], line[i+1]) for i in range(0, len(line), 2)]
 
-        # Find the convex hull using Jarvis's scan
         hull = jarvis_scan(points)
 
-        # Draw the polygon using lines
         for i in range(len(hull)):
             start = hull[i]
             end = hull[(i + 1) % len(hull)]
@@ -907,7 +901,6 @@ class GraphicsEditor2D:
             x, y = stack.pop()
 
             if x >= 0 and x < self.width and y >= 0 and y < self.height and (x, y) not in painted_pixels and is_point_inside_any_polygon(x, y, self.polygons):
-                # Находим левую и правую границы строки, содержащей заполняемый пиксель
                 left = x
                 right = x
 
@@ -917,7 +910,6 @@ class GraphicsEditor2D:
                 while right < self.width - 1 and (right + self.grid_size, y) not in painted_pixels and is_point_inside_any_polygon(right + self.grid_size, y, self.polygons):
                     right += self.grid_size
 
-                # Закрашиваем строку между левой и правой границами
                 i = left
                 while i <= right:
                     self.canvas.create_rectangle(i - self.grid_size / 2, y - self.grid_size / 2, x + self.grid_size / 2, y + self.grid_size / 2, fill="black")
@@ -928,9 +920,7 @@ class GraphicsEditor2D:
                     self.canvas.delete("debug")
 
                     painted_pixels.append((i, y))
-                    #image[i, y] = fill_color
 
-                    # Добавляем соседние пиксели в стек для дальнейшего заполнения
                     if y > 0 and (i, y - self.grid_size) not in painted_pixels and is_point_inside_any_polygon(i, y - self.grid_size, self.polygons):
                         stack.append((i, y - self.grid_size))
 
