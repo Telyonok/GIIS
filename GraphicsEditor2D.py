@@ -3,6 +3,63 @@ import keyboard
 from MatrixFunctions import MatrixFunctions 
 import numpy as np
 import tkinter as tk
+from scipy.spatial import Delaunay, Voronoi
+
+def clip_line(x1, y1, x2, y2, canvas_width, canvas_height):
+    INSIDE = 0  # Both points are inside the canvas
+    LEFT = 1    # Bitmask for left boundary
+    RIGHT = 2   # Bitmask for right boundary
+    BOTTOM = 4  # Bitmask for bottom boundary
+    TOP = 8     # Bitmask for top boundary
+
+    def compute_outcode(x, y):
+        code = INSIDE
+        if x < 0:
+            code |= LEFT
+        elif x > canvas_width:
+            code |= RIGHT
+        if y < 0:
+            code |= BOTTOM
+        elif y > canvas_height:
+            code |= TOP
+        return code
+
+    outcode1 = compute_outcode(x1, y1)
+    outcode2 = compute_outcode(x2, y2)
+
+    while True:
+        if not (outcode1 | outcode2):  # Trivially accept
+            break
+        if outcode1 & outcode2:  # Trivially reject
+            return None, None, None, None
+
+        x = 0
+        y = 0
+        outcode = outcode1 if outcode1 else outcode2
+
+        if outcode & TOP:
+            x = x1 + (x2 - x1) * (canvas_height - y1) / (y2 - y1)
+            y = canvas_height
+        elif outcode & BOTTOM:
+            x = x1 + (x2 - x1) * (0 - y1) / (y2 - y1)
+            y = 0
+        elif outcode & RIGHT:
+            y = y1 + (y2 - y1) * (canvas_width - x1) / (x2 - x1)
+            x = canvas_width
+        elif outcode & LEFT:
+            y = y1 + (y2 - y1) * (0 - x1) / (x2 - x1)
+            x = 0
+
+        if outcode == outcode1:
+            x1 = x
+            y1 = y
+            outcode1 = compute_outcode(x1, y1)
+        else:
+            x2 = x
+            y2 = y
+            outcode2 = compute_outcode(x2, y2)
+    
+    return x1, y1, x2, y2
 
 def fractional_part(num):
     return num - int(num)
@@ -19,7 +76,6 @@ def is_point_inside_polygon(x, y, polygon):
             intersections += 1
 
     return intersections % 2 != 0
-
     
 def is_point_inside_any_polygon(x, y, polygons):
     for poly in polygons:
@@ -158,6 +214,16 @@ class GraphicsEditor2D:
                 self.draw_jarvis_polygon(self.current_line, "ghost")            
             else:
                 return
+        elif (self.mode_var.get() == 'Delone triangulation' and self.current_line != None and len(self.current_line) >= 3):
+            self.draw_delone_triangulation(self.current_line)
+            self.current_line = []
+            self.redraw_markers()
+            return
+        elif (self.mode_var.get() == 'Voronoi diagram' and self.current_line != None and len(self.current_line) >= 3):
+            self.draw_voronoi_diagram(self.current_line)
+            self.current_line = []
+            self.redraw_markers()
+            return
         self.redraw_markers()
         self.correction_mode = True
 
@@ -241,7 +307,7 @@ class GraphicsEditor2D:
         self.mode_var = tk.StringVar(self.window)
         self.mode_var.set("Line")
 
-        mode_menu = tk.OptionMenu(self.window, self.mode_var, "Line", "Second-order line", "Curve", "Polygon")
+        mode_menu = tk.OptionMenu(self.window, self.mode_var, "Line", "Second-order line", "Curve", "Polygon", "Delone triangulation", "Voronoi diagram", "Line section")
         mode_menu.pack(side="left")
 
     def redraw_markers(self):
@@ -350,7 +416,7 @@ class GraphicsEditor2D:
 
         if self.current_line is None:
             self.current_line = [x_center, y_center]
-        elif((len(self.current_line) < 4 and self.mode_var.get() == 'Second-order line' and self.second_order_line_algorithm_var.get() == 'Parabola') or (self.mode_var.get() == 'Curve') or (self.mode_var.get() == 'Polygon')):
+        elif((len(self.current_line) < 4 and self.mode_var.get() == 'Second-order line' and self.second_order_line_algorithm_var.get() == 'Parabola') or (self.mode_var.get() == 'Curve') or (self.mode_var.get() == 'Polygon') or (self.mode_var.get() == 'Delone triangulation') or (self.mode_var.get() == 'Voronoi diagram')):
             self.current_line.extend([x_center, y_center])
         else:
             self.current_line.extend([x_center, y_center])
@@ -928,6 +994,165 @@ class GraphicsEditor2D:
                         stack.append((i, y + self.grid_size))
                     i += self.grid_size
 
+    def draw_delone_triangulation(self, line):
+        def inside_circle(A, B, C, P):
+            ax = A[0] - P[0]
+            ay = A[1] - P[1]
+            bx = B[0] - P[0]
+            by = B[1] - P[1]
+            cx = C[0] - P[0]
+            cy = C[1] - P[1]
+
+            return (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)) >= 1e-12
+        
+        def cross_product(u, v):
+            return u[0] * v[1] - u[1] * v[0]
+        
+        def triangulate(points):
+            n = len(points)
+            edges = []
+
+            sorted_points = sorted(points, key=lambda p: p[0])
+
+            for i in range(n):
+                while len(edges) >= 2:
+                    j = len(edges) - 2
+                    k = len(edges) - 1
+                    A = sorted_points[edges[j][0]]
+                    B = sorted_points[edges[j][1]]
+                    C = sorted_points[edges[k][1]]
+
+                    if cross_product((B[0] - A[0], B[1] - A[1]), (C[0] - B[0], C[1] - B[1])) > 0:
+                        break
+
+                    edges.pop()
+
+                edges.append((len(edges), i))
+
+            lower = len(edges)
+            t = lower + 1
+
+            for i in range(n - 2, -1, -1):
+                while len(edges) >= t:
+                    j = len(edges) - 2
+                    k = len(edges) - 1
+                    A = sorted_points[edges[j][0]]
+                    B = sorted_points[edges[j][1]]
+                    C = sorted_points[edges[k][1]]
+
+                    if cross_product((B[0] - A[0], B[1] - A[1]), (C[0] - B[0], C[1] - B[1])) > 0:
+                        break
+
+                    edges.pop()
+
+                edges.append((i, len(edges)))
+
+            edges.pop()
+
+            result = []
+            for i in range(len(edges)):
+                a = edges[i][0]
+                b = edges[i][1]
+                A = sorted_points[a]
+                B = sorted_points[b]
+                flag = True
+
+                for j in range(n):
+                    if j == a or j == b:
+                        continue
+
+                    P = sorted_points[j]
+                    if inside_circle(A, B, P, sorted_points[(a + b) >> 1]):
+                        flag = False
+                        break
+
+                if flag:
+                    result.append((a, b))
+                    self.canvas.create_line(sorted_points[a][0], sorted_points[a][1], sorted_points[b][0], sorted_points[b][1])
+
+            return result
+        
+        points = []
+        for i in range(0, len(line), 2):
+            points.append((line[i], line[i + 1]))
+        triangulation = Delaunay(np.array(points))
+        triangulate(points)
+        for triangle in triangulation.simplices.copy():
+            x1, y1 = points[triangle[0]]
+            x2, y2 = points[triangle[1]]
+            x3, y3 = points[triangle[2]]
+            self.draw_line_bresenham(x1, y1, x2, y2)
+            self.draw_line_bresenham(x2, y2, x3, y3)
+            self.draw_line_bresenham(x3, y3, x1, y1)
+    
+    def compute_voronoi(points, bbox=None):
+        min_distance = 0.1
+        if bbox is None:
+            xmin = np.min(points[:, 0])
+            xmax = np.max(points[:, 0])
+            ymin = np.min(points[:, 1])
+            ymax = np.max(points[:, 1])
+            xrange = xmax - xmin
+            yrange = ymax - ymin
+            padding = max(xrange, yrange) * 0.1
+            bbox = [
+                xmin - padding, xmax + padding,
+                ymin - padding, ymax + padding
+            ]
+        
+        points = np.vstack([points, [bbox[0], bbox[2]], [bbox[0], bbox[3]], [bbox[1], bbox[2]], [bbox[1], bbox[3]]])
+        
+        lines = []
+        vertices = []
+        
+        for i, point in enumerate(points):
+            segments = []
+            
+            for j, vertex in enumerate(vertices):
+                distance = np.linalg.norm(point - vertex)
+                
+                if distance <= min_distance:
+                    segments.append(j)
+            
+            if len(segments) >= 2:
+                lines.append([segments[0], segments[1]])
+            
+            vertices.append(point)
+        
+        return np.array(lines), np.array(vertices)
+
+    def draw_voronoi_diagram2(self, line):
+        points = []
+        for i in range(0, len(line), 2):
+            points.append((line[i], line[i + 1]))
+        lines, vertices = self.compute_voronoi(points)
+        
+        for line in lines:
+            x1, y1 = vertices[line[0]]
+            x2, y2 = vertices[line[1]]
+            self.canvas.create_line(x1, y1, x2, y2, fill="blue")
+        
+        for point in points:
+            x, y = point
+            self.canvas.create_oval(x-2, y-2, x+2, y+2, fill="red")
+
+    def draw_voronoi_diagram(self, line):
+        points = []
+        for i in range(0, len(line), 2):
+            points.append((line[i], line[i + 1]))
+
+        vor = Voronoi(np.array(points))
+        for ridge in vor.ridge_vertices:
+            if -1 not in ridge:
+                x1, y1, x2, y2 = clip_line(vor.vertices[ridge[0]][0], vor.vertices[ridge[0]][1],
+                                        vor.vertices[ridge[1]][0], vor.vertices[ridge[1]][1],
+                                        self.width, self.height)
+                x1 = ((x1 // self.grid_size) * self.grid_size) + (self.grid_size // 2)
+                y1 = ((y1 // self.grid_size) * self.grid_size) + (self.grid_size // 2)
+                x2 = ((x2 // self.grid_size) * self.grid_size) + (self.grid_size // 2)
+                y2 = ((y2 // self.grid_size) * self.grid_size) + (self.grid_size // 2)
+                self.draw_line_bresenham(x1, y1, x2, y2)
+    
     def draw_line_dda(self, x1, y1, x2, y2):
         dx = int((x2 - x1) / self.grid_size)
         dy = int((y2 - y1) / self.grid_size)
